@@ -58,6 +58,7 @@ JsonValue provideDocumentSymbols(DocumentSymbolParams params)
 		return provideDocumentSymbolsHierarchical(params).toJsonValue;
 	else
 		return provideDocumentSymbolsOld(DocumentSymbolParamsEx(params, true)).map!"a.downcast".array.toJsonValue;
+
 }
 
 private struct OldSymbolsCache
@@ -113,16 +114,24 @@ SymbolInformationEx makeSymbolInfoEx(scope const ref DefinitionElement def, Docu
 	info.location.range = TextRange(startPosition, endPosition);
 	info.kind = convertFromDscannerType(def.type, def.name);
 	info.extendedType = convertExtendedFromDscannerType(def.type);
-	const(string)* ptr;
-	auto attribs = def.attributes;
-	if ((ptr = "struct" in attribs) !is null || (ptr = "class" in attribs) !is null
-			|| (ptr = "enum" in attribs) !is null || (ptr = "union" in attribs) !is null)
-		info.containerName = *ptr;
-	if ("deprecation" in attribs)
+	if (auto cname = "struct" in def.attributes)
+		if (info.containerName.length == 0) info.containerName = *cname;
+	if (auto cname = "enum" in def.attributes)
+		if (info.containerName.length == 0) info.containerName = *cname;
+	if (auto cname = "class" in def.attributes)
+		if (info.containerName.length == 0) info.containerName = *cname;
+	if (auto cname = "interface" in def.attributes)
+		if (info.containerName.length == 0) info.containerName = *cname;
+	if (auto cname = "union" in def.attributes)
+		if (info.containerName.length == 0) info.containerName = *cname;
+
+		// 使用 DefinitionElement 中的 containerName（父符号名称）
+	//info.containerName = def.containerName; // corrected field name
+	if ("deprecation" in def.attributes)
 		info.tags = [SymbolTag.deprecated_];
-	if (auto signature = "signature" in attribs)
+	if (auto signature = "signature" in def.attributes)
 		info.detail = *signature;
-	if (auto detail = "detail" in attribs)
+	if (auto detail = "detail" in def.attributes)
 		info.detail = *detail;
 	return info;
 }
@@ -133,6 +142,7 @@ struct DocumentSymbolInfo
 	DocumentSymbol symbol;
 	string parent;
 	alias symbol this;
+	int[] childIndices;  // 存储子节点在all数组中的索引
 }
 
 PerDocumentCache!(DocumentSymbolInfo[]) documentSymbolsCacheHierarchical;
@@ -157,22 +167,118 @@ DocumentSymbolInfo[] provideDocumentSymbolsHierarchical(DocumentSymbolParams par
 		all ~= sym;
 	}
 
-	foreach (ref sym; all)
+	// 使用范围构建层级结构
+	// 规则：如果一个符号的范围完全在另一个符号的范围内，则它是另一个符号的子级
+	// 选择直接父级（最小的包含范围）
+	
+	// 辅助函数：检查a是否包含b（a的范围完全包含b的范围）
+	static bool contains(ref DocumentSymbolInfo a, ref DocumentSymbolInfo b)
 	{
-		if (sym.parent.length)
+		// 检查起始位置
+		if (a.range.start.line > b.range.start.line)
+			return false;
+		if (a.range.start.line == b.range.start.line && a.range.start.character > b.range.start.character)
+			return false;
+		// 检查结束位置
+		if (a.range.end.line < b.range.end.line)
+			return false;
+		if (a.range.end.line == b.range.end.line && a.range.end.character < b.range.end.character)
+			return false;
+		return true;
+	}
+	
+	// 第一步：为每个符号找到其直接父级（范围最小的直接包含者）并记录子关系
+	foreach (i, ref sym; all)
+	{
+		DocumentSymbolInfo* bestParent = null;
+		int bestParentIndex = -1;
+		
+		foreach (j, ref other; all)
 		{
-			foreach (ref other; all)
+			// 跳过自己
+			if (i == j)
+				continue;
+			
+			// 检查other的范围是否完全包含sym的范围
+			if (contains(other, sym))
 			{
-				if (other.name == sym.parent)
+				// 选择最小的包含范围（最直接的父级）
+				if (bestParent is null)
 				{
-					other.children ~= sym;
-					break;
+					bestParent = &other;
+					bestParentIndex = cast(int)j;
+				}
+				else if (contains(*bestParent, other))
+				{
+					// other在bestParent内部，所以other是更直接的父级
+					bestParent = &other;
+					bestParentIndex = cast(int)j;
 				}
 			}
 		}
+		
+		// 如果找到了父级，记录子关系（使用索引而非拷贝）
+		if (bestParentIndex >= 0)
+		{
+			all[bestParentIndex].childIndices ~= cast(int)i;
+		}
 	}
-
-	DocumentSymbolInfo[] ret = all.filter!(a => a.parent.length == 0).array;
+	
+	// 第二步：从叶子节点向上递归构建DocumentSymbol树
+	DocumentSymbol buildSymbolTree(int index)
+	{
+		DocumentSymbol result = all[index].symbol;  // 拷贝基础信息
+		result.children = null;  // 清空children，重新构建
+		
+		// 递归构建子节点
+		foreach (childIdx; all[index].childIndices)
+		{
+			result.children ~= buildSymbolTree(childIdx);
+		}
+		
+		return result;
+	}
+	
+	// 第三步：找到所有顶层节点并构建最终的层级结构
+	DocumentSymbolInfo[] ret;
+	foreach (i, ref sym; all)
+	{
+		bool hasParent = false;
+		foreach (j, ref other; all)
+		{
+			if (i != j && contains(other, sym))
+			{
+				hasParent = true;
+				break;
+			}
+		}
+		if (!hasParent)
+		{
+			// 这是顶层节点，构建完整的子树
+			DocumentSymbolInfo topNode;
+			topNode.symbol = buildSymbolTree(cast(int)i);
+			topNode.parent = sym.parent;
+			ret ~= topNode;
+		}
+	}
+	
 	documentSymbolsCacheHierarchical.store(documents.tryGet(params.textDocument.uri), ret);
+	
+	// 调试输出：打印最终层级树
+	io.writeln("=== DEBUG HIERARCHY ===");
+	void printTree(DocumentSymbol[] symbols, int indent = 0)
+	{
+		foreach (sym; symbols)
+		{
+			foreach (_; 0 .. indent) io.write("  ");
+			io.writeln(sym.name, " (", sym.children.length, " children)");
+			printTree(sym.children, indent + 1);
+		}
+	}
+	DocumentSymbol[] topLevelSymbols;
+	foreach (sym; ret) topLevelSymbols ~= sym.symbol;
+	printTree(topLevelSymbols);
+	io.writeln("=== END HIERARCHY ===");
+	
 	return ret;
 }

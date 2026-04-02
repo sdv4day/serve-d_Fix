@@ -1487,7 +1487,7 @@ struct Context
 			if (s._is!Metadata)
 			{
 				auto m = s.get!Metadata;
-				if (!m.hidden)
+				if (!m.hidden && m.name !in ret)  // 只在键不存在时添加，确保最新的优先
 					ret[m.name] = m.value;
 			}
 		return ret;
