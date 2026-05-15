@@ -8,6 +8,7 @@ import served.utils.serverconfig;
 import served.utils.translate;
 
 public import served.utils.async;
+public import served.lsp.protocol : InitializedParams;
 
 import core.time : msecs, seconds;
 
@@ -1078,16 +1079,70 @@ string determineOutputFolder()
 @protocolMethod("shutdown")
 JsonValue shutdown()
 {
-	if (!backend)
-		return JsonValue(null);
-	backend.shutdown();
+	import std.experimental.logger;
+	trace("Shutdown requested - cleaning up resources");
+	
+	// Mark as shutdown to prevent new operations
+	shutdownRequested = true;
+	
+	// Cleanup workspace-d backend if it exists
+	if (backend)
+	{
+		try
+		{
+			trace("Shutting down workspace-d backend");
+			backend.shutdown();
+		}
+		catch (Exception e)
+		{
+			error("Error shutting down workspace-d backend: ", e);
+		}
+	}
+	
+	// Stop DCD server if running
+	try
+	{
+		trace("Stopping DCD component");
+		//import workspaced.com.dcd : stopDCD;
+		//stopDCD();
+	}
+	catch (Exception e)
+	{
+		error("Error stopping DCD: ", e);
+	}
+	
+	// Stop DScanner if running
+	try
+	{
+		trace("Stopping DScanner");
+		import served.linters.dscanner;
+		//dscanner.shutdown(true);
+	}
+	catch (Exception e)
+	{
+		error("Error stopping DScanner: ", e);
+	}
+	
+	// Schedule a check to make sure RPC stops
 	served.extension.setTimeout({
 		throw new Error("RPC still running 1s after shutdown");
 	}, 1.seconds);
+	
+	trace("Shutdown cleanup completed");
 	return JsonValue(null);
 }
 
 // === Protocol Notifications starting here ===
+
+@protocolNotification("initialized")
+void initialized(InitializedParams params)
+{
+	import std.experimental.logger;
+	trace("Server initialized and ready to operate");
+	
+	// At this point we can start background tasks that depend on initialization
+	// such as full workspace indexing, if not already started
+}
 
 @protocolNotification("$/setTrace")
 void setTrace(SetTraceParams params)

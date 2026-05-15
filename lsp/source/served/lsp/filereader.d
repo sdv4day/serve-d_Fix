@@ -30,7 +30,7 @@ version (Windows) class WindowsStdinReader : FileReader
 	{
 		closeEvent.reset();
 		scope (exit)
-			closeEvent.set();
+			closeEvent.setIfInitialized();
 
 		auto stdin = GetStdHandle(STD_INPUT_HANDLE);
 		ubyte[4096] buffer;
@@ -107,7 +107,7 @@ version (Windows) class WindowsFileReader : FileReader
 	{
 		closeEvent.reset();
 		scope (exit)
-			closeEvent.set();
+			closeEvent.setIfInitialized();
 
 		ubyte[4096] buffer;
 

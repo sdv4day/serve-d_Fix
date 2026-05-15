@@ -567,10 +567,10 @@ private:
 				onData(request);
 				Fiber.yield();
 			}
-
+			
 			foreach (req; extraRequests)
 			{
-				onData(request);
+				onData(req); // Fixed: was incorrectly using 'request' instead of 'req'
 				Fiber.yield();
 			}
 		}
@@ -635,7 +635,7 @@ private:
 				}
 			}
 
-			if (!isResponse && slices.result.length)
+			if (!isResponse)
 			{
 				trace("Unknown request response ID: ", json);
 				send(ResponseMessage(tok,
