@@ -16,3 +16,4 @@ __dummy.html
 /bin/
 *.lst
 /build/
+dub.selections.json
