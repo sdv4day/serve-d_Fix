@@ -247,7 +247,7 @@ struct Configuration
 			else
 				static immutable searchPrefixes = ["", "dcd", "DCD", "dcd/bin", "DCD/bin"];
 
-			foreach (prefix; ["", "dcd", "DCD", "dcd/bin", "DCD/bin"])
+			foreach (prefix; searchPrefixes)
 			{
 				auto finalPath = buildPath(outputFolder, prefix, exePath);
 				if (fs.exists(finalPath))
