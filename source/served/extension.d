@@ -1061,18 +1061,27 @@ string determineOutputFolder()
 
 	version (linux)
 	{
-		if (fs.exists(buildPath(environment["HOME"], ".local", "share")))
-			return buildPath(environment["HOME"], ".local", "share", "code-d", "bin");
+		string home = environment.get("HOME", "");
+		if (!home.length)
+			return buildPath(".", ".code-d", "bin");
+		if (fs.exists(buildPath(home, ".local", "share")))
+			return buildPath(home, ".local", "share", "code-d", "bin");
 		else
-			return buildPath(environment["HOME"], ".code-d", "bin");
+			return buildPath(home, ".code-d", "bin");
 	}
 	else version (Windows)
 	{
-		return buildPath(environment["APPDATA"], "code-d", "bin");
+		string appdata = environment.get("APPDATA", "");
+		if (!appdata.length)
+			return buildPath(".", "code-d", "bin");
+		return buildPath(appdata, "code-d", "bin");
 	}
 	else
 	{
-		return buildPath(environment["HOME"], ".code-d", "bin");
+		string home = environment.get("HOME", "");
+		if (!home.length)
+			return buildPath(".", ".code-d", "bin");
+		return buildPath(home, ".code-d", "bin");
 	}
 }
 
@@ -1099,30 +1108,18 @@ JsonValue shutdown()
 		}
 	}
 	
-	// Stop DCD server if running
+	// Clear DScanner diagnostics
 	try
 	{
-		trace("Stopping DCD component");
-		//import workspaced.com.dcd : stopDCD;
-		//stopDCD();
+		trace("Clearing DScanner diagnostics");
+		import served.linters.dscanner : clear;
+		clear();
 	}
 	catch (Exception e)
 	{
-		error("Error stopping DCD: ", e);
+		error("Error clearing DScanner: ", e);
 	}
-	
-	// Stop DScanner if running
-	try
-	{
-		trace("Stopping DScanner");
-		import served.linters.dscanner;
-		//dscanner.shutdown(true);
-	}
-	catch (Exception e)
-	{
-		error("Error stopping DScanner: ", e);
-	}
-	
+
 	// Schedule a check to make sure RPC stops
 	served.extension.setTimeout({
 		throw new Error("RPC still running 1s after shutdown");
