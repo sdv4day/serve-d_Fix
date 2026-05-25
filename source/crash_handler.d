@@ -32,10 +32,10 @@ static if (BacktraceHandler)
 	{
 		import core.sys.posix.stdio : fprintf, stderr;
 		import core.sys.posix.signal : signal, SIGABRT, SIGALRM, SIGILL, SIGINT,
-			SIGKILL, SIGPIPE, SIGSEGV, SIGTRAP;
+			SIGPIPE, SIGSEGV, SIGTRAP;
 
 		static foreach (sig; [
-				SIGABRT, SIGALRM, SIGILL, SIGINT, SIGKILL, SIGPIPE, SIGSEGV, SIGTRAP
+				SIGABRT, SIGALRM, SIGILL, SIGINT, SIGPIPE, SIGSEGV, SIGTRAP
 			])
 			signal(sig, &backtrace_handler);
 

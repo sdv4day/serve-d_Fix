@@ -207,7 +207,7 @@ class ExternalDCDClient : IDCDClient
 			if (splits.length >= 3)
 			{
 				InlayHint hint;
-				hint.kind = splits[0] == "" ? char.init : splits[1][0];
+				hint.kind = splits[0] == "" ? char.init : splits[0][0];
 				hint.identifier = splits[1];
 				hint.symbolLocation = splits[2].to!size_t;
 				results ~= hint;
