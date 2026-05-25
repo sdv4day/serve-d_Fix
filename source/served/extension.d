@@ -1112,8 +1112,8 @@ JsonValue shutdown()
 	try
 	{
 		trace("Clearing DScanner diagnostics");
-		import served.linters.dscanner;
-		dscanner.clear();
+		import served.linters.dscanner : clear;
+		clear();
 	}
 	catch (Exception e)
 	{
